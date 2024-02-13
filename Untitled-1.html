@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="utf-8">
+    <title>疫情数据可视化</title>
+    <link rel="stylesheet" href="https://js.arcgis.com/4.18/esri/themes/light/main.css">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://js.arcgis.com/4.18/"></script>
+    <style>
+        html, body, #viewDiv {
+            padding: 0;
+            margin: 0;
+            height: 100%;
+            width: 100%;
+        }
+        #dataContainer, #chartContainer {
+            display: none;
+            position: absolute;
+            top: 50px;
+            left: 50px;
+            z-index: 100;
+            background: white;
+            padding: 10px;
+            border-radius: 5px;
+            border: 1px solid #ccc;
+            max-height: 400px;
+            overflow-y: auto;
+        }
+        #dataTable {
+            border-collapse: collapse;
+            width: 100%;
+        }
+        #dataTable, #dataTable th, #dataTable td {
+            border: 1px solid black;
+        }
+        #dataTable th, #dataTable td {
+            padding: 8px;
+            text-align: left;
+        }
+        #casesChart {
+            width: 600px;
+            height: 400px;
+        }
+        #floatingPanel {
+            position: absolute;
+            top: 10px;
+            right: 10px;
+            background: rgba(255, 255, 255, 0.5); /* 半透明背景 */
+            border-radius: 5px;
+            padding: 10px;
+            z-index: 1000; /* 确保悬浮框位于顶层 */
+        }
+        #buttonsContainer button {
+            margin: 5px;
+            display: block; /* 让按钮垂直排列 */
+        }
+    </style>
+</head>
+<body>
+    <div id="floatingPanel">
+        <button id="togglePanel">展开/折叠</button>
+        <div id="buttonsContainer" style="display:none;">
+            <button id="shanghaiBtn">上海市</button>
+            <button id="hunanBtn">湖南省</button>
+        </div>
+    </div>
+    <div id="viewDiv"></div>
+    <div id="dataContainer">
+        <table id="dataTable">
+            <thead>
+                <tr>
+                    <th>年月</th>
+                    <th>总发病数</th>
+                </tr>
+            </thead>
+            <tbody>
+                <!-- 表格数据将通过JavaScript动态填充 -->
+            </tbody>
+        </table>
+    </div>
+    <div id="chartContainer">
+        <canvas id="casesChart"></canvas>
+    </div>
+
+    <script>
+       
+        var currentData = []; // 默认显示上海市数据
+        function fetchData(region) {
+    fetch('data.json')
+        .then(response => response.json())
+        .then(data => {
+            currentData = data[region];
+            showData('chart');
+        })
+        .catch(error => console.error('Error loading data:', error));
+}
+
+document.getElementById("shanghaiBtn").onclick = function() {
+    fetchData('shanghai');
+};
+
+document.getElementById("hunanBtn").onclick = function() {
+    fetchData('hunan');
+};
+        require([
+            "esri/Map",
+            "esri/views/MapView",
+            "esri/layers/FeatureLayer",
+            "esri/Graphic",
+            "esri/tasks/QueryTask",
+            "esri/tasks/support/Query"
+        ], function(Map, MapView, FeatureLayer, Graphic, QueryTask, Query) {
+            var map = new Map({
+                basemap: "dark-gray"
+            });
+
+            var view = new MapView({
+                container: "viewDiv",
+                map: map,
+                zoom: 6,
+                center: [112.938814, 28.228209] // 初始中心点
+            });
+            var queryTask = new QueryTask({
+                url: "https://localhost:6443/arcgis/rest/services/传染病/省行政区/MapServer/0"
+            });
+
+            var query = new Query();
+            query.returnGeometry = true;
+            query.outFields = ["*"];
+            query.where = "省 = '上海市'";
+
+            queryTask.execute(query).then(function(results) {
+                if (results.features.length > 0) {
+                    var feature = results.features[0];
+                    var graphic = new Graphic({
+                        geometry: feature.geometry,
+                        symbol: {
+                            type: "simple-fill",
+                            color: [227, 139, 79, 0.8],
+                            style: "solid",
+                            outline: {
+                                color: "white",
+                                width: 1
+                            }
+                        }
+                    });
+                    view.graphics.add(graphic);
+                }
+            });
+            var query2 = new Query();
+            query2.returnGeometry = true;
+            query2.outFields = ["*"];
+            query2.where = "省 = '湖南省'";
+
+            queryTask.execute(query2).then(function(results) {
+                if (results.features.length > 0) {
+                    var feature = results.features[0];
+                    var graphic = new Graphic({
+                        geometry: feature.geometry,
+                        symbol: {
+                            type: "simple-fill",
+                            color: [227, 139, 79, 0.8],
+                            style: "solid",
+                            outline: {
+                                color: "white",
+                                width: 1
+                            }
+                        }
+                    });
+                    view.graphics.add(graphic);
+                }
+            });
+            document.getElementById("shanghaiBtn").onclick = function() {
+    view.goTo({
+        center: [121.473701, 31.230416], // 上海市中心点
+        zoom: 10 // 适当的缩放级别
+    });
+    fetchData('shanghai'); // 使用fetchData函数加载上海市的数据
+    showData('chart');
+};
+
+
+            document.getElementById("hunanBtn").onclick = function() {
+                view.goTo({
+                    center: [112.982279, 28.19409], // 湖南省中心点
+                    zoom: 7 // 适当的缩放级别
+                });
+                fetchData('hunan'); // 使用fetchData函数加载上海市的数据
+               
+            };
+
+            document.getElementById("togglePanel").onclick = function() {
+                var container = document.getElementById("buttonsContainer");
+                container.style.display = container.style.display === "none" ? "block" : "none";
+            };
+
+            // 其他表格和折线图展示的函数...
+        });
+
+        function showData(type) {
+            var dataContainer = document.getElementById("dataContainer");
+            var chartContainer = document.getElementById("chartContainer");
+            if (type === 'table') {
+                populateTable(currentData);
+                dataContainer.style.display = "block";
+                chartContainer.style.display = "none";
+            } else if (type === 'chart') {
+                drawChart(currentData);
+                dataContainer.style.display = "none";
+                chartContainer.style.display = "block";
+            }
+        }
+
+        function populateTable(data) {
+            // 填充表格数据的代码
+            var tbody = document.getElementById("dataTable").getElementsByTagName("tbody")[0];
+                tbody.innerHTML = ""; // 先清空表格内容
+                data.forEach(function(item) {
+                    var row = tbody.insertRow();
+                    var cell1 = row.insertCell(0);
+                    var cell2 = row.insertCell(1);
+                    cell1.innerHTML = item.YearMonth;
+                    cell2.innerHTML = item["总发病数"];
+                });
+            
+
+        }
+
+        function drawChart(data) {
+            // 绘制折线图的代码
+            var ctx = document.getElementById("casesChart").getContext("2d");
+                if(window.myChart) {
+                    window.myChart.destroy();
+                }
+                window.myChart = new Chart(ctx, {
+                    type: 'line',
+                    data: {
+                        labels: data.map(item => item.YearMonth),
+                        datasets: [{
+                            label: '总发病数',
+                            data: data.map(item => item["总发病数"]),
+                            fill: false,
+                            borderColor: 'rgb(75, 192, 192)',
+                            tension: 0.1
+                        }]
+                    },
+                    options: {
+                        scales: {
+                            y: {
+                                beginAtZero: true
+                            }
+                        }
+                    }
+                });
+            }
+        // 初始化时显示折线图
+        showData('chart');
+    </script>
+</body>
+</html>
